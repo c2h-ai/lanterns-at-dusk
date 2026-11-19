@@ -1,0 +1,40 @@
+time	2026-11-19 10:11:20
+keep	lines	0	pinned	0
+briefword	3D	shown	evidence/play.png
+checklist	L1	unlisted	-	Look: 밝은 로우폴리 3D에 부드러운 그림자. 하늘색에서 연한 복숭앗빛으로 넘어가는 그라데이션 하늘, 섬 윗면은 풀빛 초록, 옆면은 따뜻한 갈색 흙과 바위. 주인공은 빨간 망토의 작은 캐릭터로 위험한 대상과 바로 구별되고, 적과 위험물은 보라와 주황으로 칠한다. 대표 디테일은 발밑에 항상 생기는 둥근 그림자로, 착지 지점을 읽게 해 준다. 모든 형체는 그려서 만들고 이모지나 맨 원은 쓰지 않는다. *(provisional)*	
+checklist	L2	unlisted	-	References: Neon White(선명한 로우폴리), Super Mario 3D World(섬 단위 코스와 발밑 그림자) *(guessed)*	
+checklist	L3	unlisted	-	View: 3D · Camera: 캐릭터 뒤 위쪽 orbit 카메라. 진행 방향을 미리 보여 주고 평범한 점프에는 흔들리지 않는다. *(provisional)*	
+checklist	F1	unlisted	-	3~4개 구간을 잇는 섬 코스와 체크포인트, 마지막 깃발	
+checklist	F2	unlisted	-	정확한 점프: 길게 눌러 높이 조절, 빠른 낙하, 코요테 타임과 점프 버퍼	
+checklist	F3	unlisted	-	착지 스쿼시와 먼지, 점프·착지 효과음, 발밑 그림자	
+checklist	F4	unlisted	-	진행 방향을 보여 주는 orbit 카메라	
+checklist	F5	unlisted	-	적 2종: 왕복하는 순찰병, 밟으면 튀어 오르는 가시 덩어리	
+checklist	F6	unlisted	-	움직이는 발판과 사라지는 발판	
+checklist	F7	unlisted	-	클리어 시간과 재시작 횟수를 보여 주는 결과 화면	
+checklist	M1	unlisted	-	넓고 평평한 첫 섬에서 시작한다.	
+checklist	M2	unlisted	-	걷다가 작은 틈을 만나면 Space로 건너고, 높은 턱 앞에서는 길게 눌러야 오를 수 있다는 걸 직접 해 보며 배운다.	
+checklist	M3	unlisted	-	이어서 체크포인트 깃발을 지나는데, 떨어지면 바로 그 깃발에서 다시 시작한다.	
+checklist	M4	unlisted	-	이 1분은 천천히 움직이는 발판을 타고 큰 틈을 건너는 첫 짜릿한 점프로 끝난다.	
+checklist	M5	unlisted	-	*(guessed)*	
+checklist	C1	unlisted	-	1분 무렵 움직이는 발판, 순찰하는 적, 사라지는 발판이 겹치며 첫 고비가 온다.	
+checklist	C2	unlisted	-	떨어지거나 맞으면 마지막 체크포인트로 즉시 돌아가고, 잃는 건 몇 초뿐이다.	
+checklist	C3	unlisted	-	뒤로 갈수록 틈이 넓어지고 발판 타이밍이 짧아진다.	
+checklist	C4	unlisted	-	*(provisional)*	
+webgl	ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)
+browser	HeadlessChrome/157.0.0.0
+console	play	1404	[.WebGL-0x12408f34200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+scene	play	0	title
+scene	play	1	play
+digits	log	bold 24px "Apple SD Gothic Neo", "Noto Sans KR", "Trebuchet MS", sans-serif	proportional	6.504
+digits	log	600 20px "Apple SD Gothic Neo", "Noto Sans KR", "Trebuchet MS", sans-serif	proportional	5.26
+measure	step-time	play	0.016	0.700	210
+lane	play	stop	3.5	524
+console	play	0	[.WebGL-0x12408f34200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+console	play	0	[.WebGL-0x12408f34200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+uncaught	play	0
+text	play	canvas	40,33,200,54	30.0	11.51	inside	체크포인트 0 / 4
+text	play	canvas	41,73,219,91	25.0	5.59	inside	시간 0:03.5   ·   실수 1
+text	play	canvas	575,651,705,673	30.0	11.51	inside	Space로 점프
+screen	play	drawn
+shot	play	prototypes/sky-hop-isles/evidence/play.png
+responds	changed	4

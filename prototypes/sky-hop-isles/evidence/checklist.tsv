@@ -1,0 +1,19 @@
+L1	pass	evidence/play.png	flat-shaded low-poly islands, peach-to-blue gradient sky, green tops, brown sides, red-caped hero; purple/orange enemies in figures.png; round foot shadow index.html:330
+L2	pass	evidence/play.png	crisp low-poly island course seen in play.png; foot shadow index.html:330
+L3	pass	evidence/play.png	camera behind and above the hero; look-ahead index.html:501, holds height through jumps index.html:498
+F1	pass	index.html:219	9 islands in 4 sections, 4 checkpoints, golden goal flag
+F2	pass	index.html:436	hold-to-rise jump cut, faster fall index.html:438, coyote index.html:428, buffer index.html:429
+F3	pass	index.html:450	landing squash, dust puffs index.html:432, jump/land tones; foot shadow index.html:330
+F4	pass	index.html:516	orbit camera with look-ahead and mouse/Q-E turning
+F5	pass	evidence/figures.png	beetle patroller walks back and forth (stomp index.html:480) and spiky ball bounces (index.html:184)
+F6	pass	index.html:286	3 moving planks and 5 crumbling tiles index.html:294
+F7	pass	index.html:616	results screen with clear time and fall count
+M1	pass	evidence/play.png	starts on a wide flat island
+M2	pass	index.html:219	2 m gap then a 1.8 m ledge only a held jump clears; hints index.html:240
+M3	pass	index.html:466	checkpoint flag turns teal; a fall respawns there index.html:376
+M4	pass	index.html:286	first moving plank carries across the big gap after checkpoint 1
+M5	pass	index.html:219	guessed mark, covered by M1-M4
+C1	pass	index.html:219	around z -50: beetle island, crumbling tiles, after the first mover
+C2	pass	index.html:376	instant respawn at last checkpoint, no lives
+C3	pass	index.html:228	later mover faster (3.2) and sideways, narrow bridge index.html:223 with a beetle, rising tiles
+C4	pass	index.html:219	provisional mark, covered by C1-C3

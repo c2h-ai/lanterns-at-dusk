@@ -1,0 +1,668 @@
+<!doctype html>
+<!-- PROTOTYPE - NOT FOR PRODUCTION -->
+<!-- Question: 3D에서 점프만으로 5분이 재미있는가? -->
+<!-- Date: 2026-11-19 -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sky Hop Isles</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #9fd3ef; overflow: hidden; }
+  body { font-variant-numeric: tabular-nums; }
+  #wrap { position: relative; margin: 0 auto; }
+  #wrap canvas { position: absolute; left: 0; top: 0; display: block; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="gl"></canvas><canvas id="game"></canvas></div>
+<script src="vendor/three.js"></script>
+<script src="config.js"></script>
+<script>
+'use strict';
+// Sky Hop Isles: a low-poly 3D platformer. Jump across floating islands to the last flag.
+
+// ---- Built to be checked ----------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.speed is CONFIG.speed.value
+const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
+const W = 1280, H = 720;        // logical size of the HUD
+const FONT = '"Apple SD Gothic Neo", "Noto Sans KR", "Trebuchet MS", sans-serif';
+const TITLE = 'Sky Hop Isles';
+const CONTROLS = [
+  'WASD / 방향키: 이동',
+  'Space: 점프 (길게 누르면 더 높이)',
+  '마우스 드래그 / Q·E: 카메라 회전',
+  'P: 일시정지 · M: 음소거',
+];
+const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
+const CHEAP = params.get('render') === 'cheap'; // a headless shot or check: 3D draws cheap; players never see it
+let seed;
+function rng() { // mulberry32; every gameplay random call reads this, never Math.random
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const events = []; // window.game.events: anything the game wants a run to see
+
+// ---- Screen: a WebGL canvas with the HUD canvas over it ---------------------------------
+const wrap = document.getElementById('wrap');
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: !CHEAP });
+renderer.setPixelRatio(CHEAP ? 0.5 : Math.min(2, devicePixelRatio || 1));
+renderer.shadowMap.enabled = !CHEAP;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+function fit() { // fills the window at any size and pixel ratio, 16:9
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  const r = s * (devicePixelRatio || 1);
+  const cw = Math.round(W * s), ch = Math.round(H * s);
+  wrap.style.width = cw + 'px'; wrap.style.height = ch + 'px';
+  wrap.style.top = Math.max(0, Math.floor((innerHeight - ch) / 2)) + 'px';
+  canvas.width = Math.round(W * r); canvas.height = Math.round(H * r);
+  canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  renderer.setSize(cw, ch);
+}
+addEventListener('resize', fit); fit();
+function text(s, x, y, size, c, align = 'center', weight = 700) {
+  ctx.font = `${weight} ${size}px ${FONT}`; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(3, size / 6); ctx.strokeStyle = 'rgba(40,30,60,0.75)';
+  ctx.strokeText(s, x, y); ctx.fillStyle = c; ctx.fillText(s, x, y);
+}
+function panel(x, y, w, h, a = 0.55) {
+  ctx.fillStyle = `rgba(40,30,70,${a})`;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 18); ctx.fill();
+}
+
+// ---- Input: keys by position (event.code), OS key repeat ignored ------------------------
+const down = new Set(), hit = new Set();
+const pressed = code => hit.has(code); // true for one step after the key goes down
+addEventListener('keydown', e => {
+  startAudio();
+  if (!e.repeat) { down.add(e.code); hit.add(e.code); }
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => down.delete(e.code));
+let dragging = false, dragX = 0, yawInput = 0; // mouse drag turns the camera
+addEventListener('pointerdown', e => { startAudio(); dragging = true; dragX = e.clientX; });
+addEventListener('pointermove', e => { if (dragging) { yawInput -= (e.clientX - dragX) * tune.mouse_sensitivity; dragX = e.clientX; } });
+addEventListener('pointerup', () => { dragging = false; });
+addEventListener('blur', () => { down.clear(); dragging = false; });
+
+// ---- Audio: started on first input, mute on M --------------------------------------------
+let audio = null, muted = false;
+function startAudio() {
+  if (!audio) {
+    const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
+    const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
+    out.connect(ac.destination); audio = { ac, out };
+  }
+  if (audio.ac.state === 'suspended') audio.ac.resume();
+}
+function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
+addEventListener('tune', () => setMuted(muted)); // the tweak panel (an add-on), when added, moved a value: the volume follows
+function tone(freq, dur, type = 'square', vol = 0.3, delay = 0, slideTo = 0) {
+  if (!audio || muted) return;
+  const t = audio.ac.currentTime + delay, o = audio.ac.createOscillator(), g = audio.ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(audio.out); o.start(t); o.stop(t + dur);
+}
+const sfx = {
+  jump: () => tone(330, 0.14, 'square', 0.12, 0, 660),
+  land: () => tone(140, 0.09, 'triangle', 0.35, 0, 70),
+  stomp: () => { tone(520, 0.08, 'square', 0.15); tone(880, 0.12, 'square', 0.12, 0.06); },
+  fall: () => tone(420, 0.35, 'sawtooth', 0.12, 0, 90),
+  hurt: () => { tone(200, 0.2, 'sawtooth', 0.18); tone(120, 0.25, 'sawtooth', 0.15, 0.08); },
+  checkpoint: () => [523, 659, 784].forEach((f, i) => tone(f, 0.18, 'triangle', 0.25, i * 0.08)),
+  crumble: () => tone(90, 0.25, 'sawtooth', 0.12, 0, 50),
+  win: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, 0.22, 'triangle', 0.25, i * 0.11)),
+};
+
+// ---- Look: palette and low-poly pieces ---------------------------------------------------
+const PAL = {
+  grass: 0x7cc457, grassDark: 0x5a9e3c, dirt: 0xa8744a, rock: 0x8a5f3f, wood: 0xc98f52, woodDark: 0x8f5e33,
+  stone: 0xeadfc6, stoneCrack: 0xb7a786, cloud: 0xffffff, leaf: 0x3f8f4a, leafLight: 0x5fb35a, trunk: 0x7a4e2c,
+  hero: 0xf6eedc, skin: 0xffd2a8, cape: 0xe0393e, capeDark: 0xa81f2a, boot: 0x5a3a2a, eye: 0x2a2030,
+  purple: 0x7b3fb5, purpleDark: 0x4e2380, orange: 0xff8a2a, orangeDark: 0xd2601a, white: 0xffffff,
+  pole: 0xd8d2c8, flagOff: 0xf3f0ea, flagOn: 0x2fc6b3, gold: 0xffc43a,
+};
+const matCache = {};
+function mat(c, extra) {
+  const k = c + (extra ? JSON.stringify(extra) : '');
+  if (!matCache[k]) matCache[k] = new THREE.MeshStandardMaterial(Object.assign({ color: c, flatShading: true, roughness: 0.85, metalness: 0 }, extra));
+  return matCache[k];
+}
+function mesh(geo, c, x = 0, y = 0, z = 0, parent) {
+  const m = new THREE.Mesh(geo, typeof c === 'number' ? mat(c) : c);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+  if (parent) parent.add(m);
+  return m;
+}
+
+// The hero: a small cream figure in a red hood and cape. Model faces +z.
+function makeHero() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  mesh(new THREE.CylinderGeometry(0.26, 0.34, 0.55, 8), PAL.hero, 0, 0.42, 0, body);
+  mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.08, 8), PAL.capeDark, 0, 0.66, 0, body); // collar
+  mesh(new THREE.IcosahedronGeometry(0.3, 1), PAL.skin, 0, 0.95, 0, body);
+  const hood = mesh(new THREE.ConeGeometry(0.34, 0.42, 8), PAL.cape, 0, 1.22, -0.03, body); hood.rotation.x = -0.25;
+  mesh(new THREE.SphereGeometry(0.07, 6, 4), PAL.cape, 0, 1.38, -0.15, body); // hood tip bobble
+  for (const sx of [-1, 1]) {
+    mesh(new THREE.BoxGeometry(0.07, 0.11, 0.04), PAL.eye, sx * 0.1, 0.97, 0.27, body);
+    mesh(new THREE.BoxGeometry(0.17, 0.12, 0.28), PAL.boot, sx * 0.14, 0.07, 0.03, body);
+    const arm = mesh(new THREE.BoxGeometry(0.11, 0.34, 0.12), PAL.hero, sx * 0.36, 0.45, 0, body); arm.rotation.z = sx * 0.25;
+  }
+  const cape = mesh(new THREE.BoxGeometry(0.56, 0.62, 0.05), PAL.cape, 0, 0.4, -0.32, body); cape.rotation.x = 0.18;
+  return { group: g, body, cape };
+}
+// The beetle patroller: low, wide, purple with an orange shell stripe and six legs.
+function makeBeetle() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const shell = mesh(new THREE.IcosahedronGeometry(0.55, 0), PAL.purple, 0, 0.48, -0.05, body); shell.scale.set(1, 0.62, 1.25);
+  for (const [sx, sz] of [[-0.2, 0.15], [0.2, 0.15], [0, -0.3]]) { // orange shell spots
+    const spot = mesh(new THREE.DodecahedronGeometry(0.17, 0), PAL.orange, sx, 0.74, sz - 0.05, body); spot.scale.y = 0.45;
+  }
+  mesh(new THREE.DodecahedronGeometry(0.3, 0), PAL.purpleDark, 0, 0.45, 0.62, body);
+  for (const sx of [-1, 1]) {
+    mesh(new THREE.BoxGeometry(0.13, 0.15, 0.06), PAL.white, sx * 0.13, 0.55, 0.86, body);
+    mesh(new THREE.BoxGeometry(0.06, 0.08, 0.04), PAL.eye, sx * 0.13, 0.53, 0.9, body);
+    const ant = mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.45, 4), PAL.purpleDark, sx * 0.14, 0.82, 0.78, body);
+    ant.rotation.set(0.6, 0, -sx * 0.35);
+    mesh(new THREE.SphereGeometry(0.07, 6, 4), PAL.orange, sx * 0.24, 1.0, 0.92, body);
+    for (const lz of [-0.4, 0, 0.4]) {
+      const leg = mesh(new THREE.BoxGeometry(0.42, 0.07, 0.07), PAL.purpleDark, sx * 0.6, 0.2, lz, body);
+      leg.rotation.z = sx * -0.6;
+    }
+  }
+  return { group: g, body };
+}
+// The spiky ball: an orange core bristling with purple spikes and angry eyes.
+function makeSpiky() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  mesh(new THREE.IcosahedronGeometry(0.44, 0), PAL.orange, 0, 0, 0, body);
+  const ico = new THREE.IcosahedronGeometry(1, 0).getAttribute('position'), seen = new Set(), up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < ico.count; i++) {
+    const v = new THREE.Vector3().fromBufferAttribute(ico, i).normalize(), k = v.toArray().map(n => n.toFixed(2)).join();
+    if (seen.has(k)) continue; seen.add(k);
+    const spike = mesh(new THREE.ConeGeometry(0.11, 0.38, 4), PAL.purple, v.x * 0.52, v.y * 0.52, v.z * 0.52, body);
+    spike.quaternion.setFromUnitVectors(up, v);
+  }
+  for (const sx of [-1, 1]) {
+    mesh(new THREE.BoxGeometry(0.14, 0.13, 0.05), PAL.white, sx * 0.14, 0.08, 0.41, body);
+    mesh(new THREE.BoxGeometry(0.06, 0.07, 0.04), PAL.eye, sx * 0.13, 0.06, 0.44, body);
+    const brow = mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), PAL.eye, sx * 0.14, 0.2, 0.43, body); brow.rotation.z = sx * 0.45;
+  }
+  return { group: g, body };
+}
+function makeTree(parent, x, y, z, s) {
+  const t = new THREE.Group(); t.position.set(x, y, z); t.scale.setScalar(s); parent.add(t);
+  mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.9, 5), PAL.trunk, 0, 0.45, 0, t);
+  mesh(new THREE.ConeGeometry(0.8, 1.4, 6), PAL.leaf, 0, 1.4, 0, t);
+  mesh(new THREE.ConeGeometry(0.55, 1.0, 6), PAL.leafLight, 0, 2.1, 0, t);
+}
+function makeFlag(poleH, cloth, big) {
+  const g = new THREE.Group();
+  mesh(new THREE.CylinderGeometry(0.35 * big, 0.45 * big, 0.25, 7), PAL.stoneCrack, 0, 0.12, 0, g);
+  mesh(new THREE.CylinderGeometry(0.05 * big, 0.05 * big, poleH, 6), PAL.pole, 0, poleH / 2, 0, g);
+  const shape = new THREE.Shape(); shape.moveTo(0, 0); shape.lineTo(1.0 * big, -0.3 * big); shape.lineTo(0, -0.6 * big);
+  const flagMat = new THREE.MeshStandardMaterial({ color: cloth, flatShading: true, side: THREE.DoubleSide, roughness: 0.8 });
+  const flag = mesh(new THREE.ShapeGeometry(shape), flagMat, 0.04, poleH - 0.05, 0, g);
+  return { group: g, flag, flagMat };
+}
+
+// ---- The course: data, built once ------------------------------------------------------
+// Islands: [x, z, width, depth, top]. Movers glide a→b. Tiles crumble. Checkpoint 0 is the start.
+const LEVEL = {
+  start: [0, 3, 0],
+  islands: [
+    [0, 0, 10, 12, 0], [0, -11, 6, 6, 0], [0, -19, 7, 8, 1.8], [0, -44, 8, 8, 1.8],
+    [0, -57, 12, 12, 2.6], [0, -84, 5, 10, 3.6], [0, -99, 5, 5, 4.2], [0, -110, 2.2, 14, 4.2],
+    [0, -146, 10, 12, 5.4],
+  ],
+  movers: [
+    { a: [0, 1.8, -27], b: [0, 1.8, -36], w: 3, d: 3, speed: 2.2 },
+    { a: [-5, 3.6, -92.5], b: [5, 3.6, -92.5], w: 3, d: 3, speed: 3.2 },
+    { a: [2, 5.4, -130], b: [2, 5.4, -137], w: 2.6, d: 2.6, speed: 2.8 },
+  ],
+  tiles: [[0, -66.5, 2.6], [1.5, -71, 3.1], [-0.5, -75.5, 3.6], [0, -120.5, 4.8], [2, -125, 5.4]],
+  checkpoints: [[0, -19, 1.8], [0, -44, 1.8], [0, -80.5, 3.6], [0, -99, 4.2]],
+  beetles: [{ a: [-4.5, -57], b: [4.5, -57], top: 2.6 }, { a: [0, -104.5], b: [0, -115.5], top: 4.2 },
+            { a: [-4, -145], b: [4, -145], top: 5.4 }],
+  spikies: [{ x: 0, z: -83, top: 3.6, phase: 0 }, { x: 0, z: -86.5, top: 3.6, phase: 0.5 },
+            { x: 0, z: -142, top: 5.4, phase: 0.25 }],
+  goal: [0, -149, 5.4],
+  trees: [[-3.8, 4.5, 0, 1.1], [3.9, -4.6, 0, 0.9], [-2.7, -21.8, 1.8, 0.8], [4.8, -61.5, 2.6, 1], [-4.9, -52.5, 2.6, 0.85],
+          [-4, -150.5, 5.4, 1.1], [4.1, -151, 5.4, 0.9]],
+  hints: [[2, -3, 'Space로 점프'], [-12, -14.2, '길게 눌러 높이 점프'], [-24, -27, '움직이는 발판에 올라타기'],
+          [-50, -56, '위에서 밟으면 쓰러져요'], [-64, -70, '금 간 타일은 곧 무너져요']],
+};
+const PR = 0.32, PH = 1.2; // the hero's collision half-width and height (inside the drawn body)
+
+const scene3 = new THREE.Scene();
+{
+  const c = document.createElement('canvas'); c.width = 4; c.height = 256;
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#5fb4ea'); gr.addColorStop(0.55, '#bfe4f6'); gr.addColorStop(1, '#ffd8b6');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; scene3.background = tex;
+}
+scene3.fog = new THREE.Fog(0xf2dccb, 50, 150);
+const cam = new THREE.PerspectiveCamera(60, W / H, 0.1, 400);
+scene3.add(new THREE.HemisphereLight(0xd6ecff, 0x9a7454, 1.5));
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.4);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006;
+Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 90 });
+scene3.add(sun, sun.target);
+
+let decorSeed = 7; // decor only, so gameplay rng() stays untouched
+function decorRand() { decorSeed = (decorSeed * 16807) % 2147483647; return decorSeed / 2147483647; }
+
+const solids = []; // every collidable box: {minx,maxx,minz,maxz,top,bottom,on,kind}
+function addSolid(o) { o.on = true; solids.push(o); return o; }
+function boxAt(o, x, z, w, d) { o.minx = x - w / 2; o.maxx = x + w / 2; o.minz = z - d / 2; o.maxz = z + d / 2; }
+
+for (const [x, z, w, d, top] of LEVEL.islands) {
+  const g = new THREE.Group(); scene3.add(g);
+  mesh(new THREE.BoxGeometry(w, 0.45, d), PAL.grass, x, top - 0.225, z, g);
+  mesh(new THREE.BoxGeometry(w * 0.97, 1.0, d * 0.97), PAL.dirt, x, top - 0.95, z, g);
+  const coneH = 2.5 + Math.max(w, d) * 0.3;
+  const cone = mesh(new THREE.ConeGeometry(0.5, coneH, 7), PAL.rock, x, top - 1.45 - coneH / 2, z, g);
+  cone.rotation.x = Math.PI; cone.scale.set(w * 0.95, 1, d * 0.95);
+  for (let i = 0; i < Math.round(w * d / 12); i++) { // grass tufts along the edges
+    const side = decorRand() < 0.5 ? -1 : 1, along = decorRand() - 0.5;
+    const tuft = mesh(new THREE.ConeGeometry(0.12, 0.3, 4), PAL.grassDark, x + side * (w / 2 - 0.25), top + 0.12, z + along * (d - 0.6), g);
+    tuft.castShadow = false;
+  }
+  const s = addSolid({ kind: 'island', top, bottom: top - 1.45 }); boxAt(s, x, z, w, d);
+}
+for (const [x, z, top, s] of LEVEL.trees) {
+  makeTree(scene3, x, top, z, s);
+  const t = addSolid({ kind: 'tree', top: top + 0.9 * s, bottom: top }); boxAt(t, x, z, 0.4 * s, 0.4 * s);
+}
+const movers = LEVEL.movers.map(m => {
+  const g = new THREE.Group(); scene3.add(g);
+  mesh(new THREE.BoxGeometry(m.w, 0.35, m.d), PAL.wood, 0, -0.175, 0, g);
+  for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.18, 0.4, m.d + 0.04), PAL.woodDark, sx * (m.w / 2 - 0.12), -0.2, 0, g);
+  const prop = mesh(new THREE.ConeGeometry(0.35, 0.8, 5), PAL.woodDark, 0, -0.75, 0, g); prop.rotation.x = Math.PI;
+  const len = Math.hypot(m.b[0] - m.a[0], m.b[2] - m.a[2]);
+  return addSolid(Object.assign({ kind: 'mover', g, len, t: 0, x: m.a[0], z: m.a[2], prev: [m.a[0], m.a[2]], dx: 0, dz: 0, top: m.a[1], bottom: m.a[1] - 0.4 }, m));
+});
+const tiles = LEVEL.tiles.map(([x, z, top]) => {
+  const g = new THREE.Group(); g.position.set(x, 0, z); scene3.add(g);
+  mesh(new THREE.BoxGeometry(2.6, 0.45, 2.6), PAL.stone, 0, top - 0.225, 0, g);
+  const crack = mesh(new THREE.BoxGeometry(1.8, 0.04, 0.12), PAL.stoneCrack, 0, top + 0.01, 0, g); crack.rotation.y = 0.7;
+  const crack2 = mesh(new THREE.BoxGeometry(0.9, 0.04, 0.1), PAL.stoneCrack, 0.4, top + 0.01, -0.3, g); crack2.rotation.y = -0.6;
+  const under = mesh(new THREE.ConeGeometry(1.2, 1.6, 6), PAL.stoneCrack, 0, top - 1.25, 0, g); under.rotation.x = Math.PI;
+  const s = addSolid({ kind: 'tile', g, x, z, top, bottom: top - 0.5, phase: 'solid', timer: 0 }); boxAt(s, x, z, 2.6, 2.6);
+  return s;
+});
+const checkpoints = LEVEL.checkpoints.map(([x, z, top]) => {
+  const f = makeFlag(2.2, PAL.flagOff, 1); f.group.position.set(x + 1.6, top, z); scene3.add(f.group);
+  return Object.assign(f, { x, z, top });
+});
+const goal = (() => {
+  const [x, z, top] = LEVEL.goal, f = makeFlag(4, PAL.gold, 1.8);
+  f.group.position.set(x, top, z); scene3.add(f.group);
+  const star = mesh(new THREE.OctahedronGeometry(0.4, 0), mat(PAL.gold, { emissive: 0x7a5200 }), 0, 4.5, 0, f.group);
+  return Object.assign(f, { x, z, top, star });
+})();
+const beetles = LEVEL.beetles.map(b => {
+  const m = makeBeetle(); scene3.add(m.group);
+  const len = Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]);
+  return Object.assign(m, b, { len, t: 0, x: b.a[0], z: b.a[1], prev: [b.a[0], b.a[1]], dead: false, squish: 0 });
+});
+const spikies = LEVEL.spikies.map(s => { const m = makeSpiky(); scene3.add(m.group); return Object.assign(m, s, { y: s.top + 0.55, prevY: s.top + 0.55 }); });
+for (let i = 0; i < 26; i++) { // clouds drifting below and beside the course
+  const g = new THREE.Group(), side = decorRand() < 0.5 ? -1 : 1;
+  g.position.set(side * (14 + decorRand() * 30), -8 + decorRand() * 14, 10 - decorRand() * 170);
+  for (let k = 0; k < 4; k++) {
+    const puff = mesh(new THREE.IcosahedronGeometry(1.4 + decorRand() * 1.4, 0), mat(PAL.cloud, { emissive: 0x404040 }), k * 1.8 - 2.7, decorRand() * 0.8, decorRand() * 1.2, g);
+    puff.castShadow = false; puff.scale.y = 0.6;
+  }
+  scene3.add(g);
+}
+
+const hero = makeHero(); scene3.add(hero.group);
+const blob = new THREE.Mesh(new THREE.CircleGeometry(0.42, 18), new THREE.MeshBasicMaterial({ color: 0x1d1430, transparent: true, opacity: 0.4, depthWrite: false }));
+blob.rotation.x = -Math.PI / 2; scene3.add(blob);
+const dust = [];
+for (let i = 0; i < 20; i++) {
+  const m = new THREE.Mesh(new THREE.TetrahedronGeometry(0.13, 0), mat(0xf4ead8)); m.visible = false; scene3.add(m);
+  dust.push({ m, life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 });
+}
+function puff(x, y, z, n, power) {
+  for (const d of dust) {
+    if (n <= 0) break; if (d.life > 0) continue; n--;
+    const a = rng() * Math.PI * 2;
+    Object.assign(d, { life: 0.4, x, y: y + 0.08, z, vx: Math.cos(a) * power, vy: 0.6 + rng() * 0.8, vz: Math.sin(a) * power });
+  }
+}
+
+// The figures lineup, for the outline check (?scene=figures), far off the course.
+const lineup = (() => {
+  const g = new THREE.Group(); g.position.set(300, 0, 0); scene3.add(g);
+  mesh(new THREE.BoxGeometry(14, 0.45, 5), PAL.grass, 0, -0.225, 0, g);
+  mesh(new THREE.BoxGeometry(13.6, 1, 4.8), PAL.dirt, 0, -0.95, 0, g);
+  const items = [['히어로 (빨간 망토)', makeHero(), 1.6], ['딱정벌레 순찰병', makeBeetle(), 1.4], ['가시볼', makeSpiky(), 1.6]];
+  items.forEach(([name, m, s], i) => { m.group.position.set(-4.5 + i * 4.5, i === 2 ? 0.9 : 0, 0); m.group.scale.setScalar(s); m.group.rotation.y = 0.35; g.add(m.group); });
+  return { g, names: items.map(i => i[0]), xs: [-4.5, 0, 4.5] };
+})();
+
+// ---- State ------------------------------------------------------------------------------
+let scene, state, P, camS;
+function respawnWorld() {
+  for (const t of tiles) { t.phase = 'solid'; t.timer = 0; t.on = true; t.g.visible = true; t.g.position.y = 0; }
+  for (const b of beetles) { b.dead = false; b.squish = 0; b.group.visible = true; }
+}
+function placeHero(x, y, z) {
+  P = { x, y, z, vx: 0, vy: 0, vz: 0, prev: [x, y, z], ground: null, gy: y, coyote: 0, buffer: 0, jumping: false, squash: 0, facing: Math.PI, prevFacing: Math.PI };
+}
+function reset() {
+  seed = Number(params.get('seed')) || CONFIG.seed;
+  // state.gained: what this run gained or learned, the high the ending shows.
+  state = { t: 0, score: 0, gained: '', cp: 0, falls: 0, done: false, fade: 0, hint: '' };
+  for (const c of checkpoints) c.flagMat.color.setHex(PAL.flagOff);
+  for (const m of movers) { m.t = 0; }
+  for (const b of beetles) b.t = 0;
+  respawnWorld();
+  placeHero(...LEVEL.start);
+  camS = { yaw: 0, prevYaw: 0, fx: P.x, fy: P.y + 1.2, fz: P.z, prevF: [P.x, P.y + 1.2, P.z], gy: P.y, lax: 0, laz: 0 };
+}
+function cpPos() { return state.cp === 0 ? LEVEL.start : [checkpoints[state.cp - 1].x, checkpoints[state.cp - 1].top, checkpoints[state.cp - 1].z]; }
+function die(kind) {
+  state.falls++; state.fade = 0.35; events.push({ type: 'respawn', kind });
+  kind === 'fall' ? sfx.fall() : sfx.hurt();
+  respawnWorld();
+  const [x, y, z] = cpPos(); placeHero(x, y + 0.05, z);
+  P.facing = P.prevFacing = Math.PI;
+  camS.fx = x; camS.fy = y + 1.2; camS.fz = z; camS.gy = y; camS.lax = camS.laz = 0; camS.prevF = [camS.fx, camS.fy, camS.fz];
+}
+
+// ---- Simulation -------------------------------------------------------------------------
+const approach = (v, t, d) => v < t ? Math.min(v + d, t) : Math.max(v - d, t);
+const overlapXZ = (s, x, z, r) => x + r > s.minx && x - r < s.maxx && z + r > s.minz && z - r < s.maxz;
+function updateWorld(dt) {
+  for (const m of movers) {
+    m.prev = [m.x, m.z]; m.t += dt * tune.platform_speed;
+    const u = 0.5 - 0.5 * Math.cos(Math.PI * m.t * m.speed / m.len);
+    const nx = m.a[0] + (m.b[0] - m.a[0]) * u, nz = m.a[2] + (m.b[2] - m.a[2]) * u;
+    m.dx = nx - m.x; m.dz = nz - m.z; m.x = nx; m.z = nz; boxAt(m, nx, nz, m.w, m.d);
+  }
+  for (const t of tiles) {
+    if (t.phase === 'shake' && (t.timer -= dt) <= 0) { t.phase = 'gone'; t.on = false; t.timer = tune.vanish_return; sfx.crumble(); }
+    else if (t.phase === 'gone' && (t.timer -= dt) <= 0 && !(overlapXZ(t, P.x, P.z, PR) && P.y < t.top && P.y + PH > t.bottom)) { t.phase = 'solid'; t.on = true; }
+  }
+  for (const b of beetles) {
+    b.prev = [b.x, b.z]; if (b.dead) { b.squish += dt; continue; }
+    b.t += dt * tune.patrol_speed / b.len;
+    const u = 1 - Math.abs(1 - (b.t % 2)); // ping-pong 0..1
+    b.x = b.a[0] + (b.b[0] - b.a[0]) * u; b.z = b.a[1] + (b.b[1] - b.a[1]) * u;
+  }
+  for (const s of spikies) {
+    s.prevY = s.y;
+    s.y = s.top + 0.55 + tune.spike_hop * Math.abs(Math.sin(Math.PI * (state.t / tune.spike_period + s.phase)));
+  }
+}
+function updateHero(dt) {
+  P.prev = [P.x, P.y, P.z]; P.prevFacing = P.facing;
+  let ix = 0, iz = 0;
+  if (down.has('KeyW') || down.has('ArrowUp')) iz += 1;
+  if (down.has('KeyS') || down.has('ArrowDown')) iz -= 1;
+  if (down.has('KeyA') || down.has('ArrowLeft')) ix -= 1;
+  if (down.has('KeyD') || down.has('ArrowRight')) ix += 1;
+  const yaw = camS.yaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  let wx = fx * iz + rx * ix, wz = fz * iz + rz * ix; const len = Math.hypot(wx, wz);
+  if (len > 1) { wx /= len; wz /= len; }
+  const acc = (P.ground ? (len > 0 ? tune.ground_accel : tune.ground_decel) : tune.air_accel) * dt;
+  P.vx = approach(P.vx, wx * tune.move_speed, acc); P.vz = approach(P.vz, wz * tune.move_speed, acc);
+  if (len > 0.1) { // turn the body toward where it runs
+    const want = Math.atan2(wx, wz); let d = want - P.facing; d = Math.atan2(Math.sin(d), Math.cos(d));
+    P.facing += d * Math.min(1, dt * 14);
+  }
+  // The jump: gravity and launch speed come from the height and the time to the top.
+  const g = 2 * tune.jump_height / (tune.time_to_apex * tune.time_to_apex), v0 = g * tune.time_to_apex;
+  P.coyote = P.ground ? tune.coyote_time : P.coyote - dt;
+  P.buffer = pressed('Space') ? tune.jump_buffer : P.buffer - dt;
+  if (P.buffer > 0 && P.coyote > 0) {
+    P.vy = v0; P.buffer = 0; P.coyote = 0; P.jumping = true; P.squash = -0.28;
+    sfx.jump(); puff(P.x, P.y, P.z, 3, 1.2); events.push({ type: 'jump' });
+    if (P.ground && P.ground.kind === 'mover') { P.vx += P.ground.dx / dt * 0.5; P.vz += P.ground.dz / dt * 0.5; }
+    P.ground = null;
+  }
+  if (P.jumping && !down.has('Space') && P.vy > 0) { P.vy *= tune.jump_cut; P.jumping = false; }
+  if (P.vy <= 0) P.jumping = false;
+  P.vy = Math.max(P.vy - g * (P.vy > 0 ? 1 : tune.fall_gravity_mult) * dt, -tune.max_fall_speed);
+  if (P.ground && P.ground.kind === 'mover') { P.x += P.ground.dx; P.z += P.ground.dz; }
+  // Vertical: land on tops, bump heads on bottoms.
+  const prevY = P.y, vyIn = P.vy, was = P.ground; P.y += P.vy * dt; P.ground = null;
+  for (const s of solids) {
+    if (!s.on || !overlapXZ(s, P.x, P.z, PR) || !(P.y < s.top && P.y + PH > s.bottom)) continue;
+    if (P.vy <= 0 && prevY >= s.top - 0.2) { P.y = s.top; P.vy = 0; P.ground = s; }
+    else if (P.vy > 0 && prevY + PH <= s.bottom + 0.2) { P.y = s.bottom - PH; P.vy = 0; }
+  }
+  if (P.ground) P.gy = P.y;
+  if (P.ground && !was) {
+    const impact = Math.min(1, -vyIn / 18);
+    P.squash = 0.12 + impact * 0.3; sfx.land();
+    if (impact > 0.45) puff(P.x, P.y, P.z, 6, 2.2); else puff(P.x, P.y, P.z, 2, 1.2);
+  }
+  if (P.ground && P.ground.kind === 'tile' && P.ground.phase === 'solid') { P.ground.phase = 'shake'; P.ground.timer = tune.vanish_delay; }
+  // Horizontal: move, then push out along the shallower side of any wall.
+  P.x += P.vx * dt; P.z += P.vz * dt;
+  for (const s of solids) {
+    if (!s.on || !overlapXZ(s, P.x, P.z, PR) || !(P.y < s.top - 0.02 && P.y + PH > s.bottom + 0.02)) continue;
+    const px = Math.min(P.x + PR - s.minx, s.maxx - (P.x - PR)), pz = Math.min(P.z + PR - s.minz, s.maxz - (P.z - PR));
+    if (px < pz) { P.x = (P.x < (s.minx + s.maxx) / 2) ? s.minx - PR : s.maxx + PR; P.vx = 0; }
+    else { P.z = (P.z < (s.minz + s.maxz) / 2) ? s.minz - PR : s.maxz + PR; P.vz = 0; }
+  }
+  P.squash *= Math.exp(-dt * 12);
+}
+function checkTouches() {
+  // Checkpoints and the goal.
+  checkpoints.forEach((c, i) => {
+    if (i + 1 > state.cp && Math.hypot(P.x - c.x, P.z - c.z) < 2.4 && Math.abs(P.y - c.top) < 1.5) {
+      state.cp = i + 1; c.flagMat.color.setHex(PAL.flagOn); sfx.checkpoint(); events.push({ type: 'checkpoint', n: state.cp });
+    }
+  });
+  if (Math.hypot(P.x - goal.x, P.z - goal.z) < 1.4 && Math.abs(P.y - goal.top) < 2) {
+    state.done = true; state.gained = '클리어!'; sfx.win(); events.push({ type: 'win', t: state.t, falls: state.falls });
+    scene = 'results'; return;
+  }
+  // Beetles: stomp from above, touch from the side hurts. The hit box sits inside the body.
+  for (const b of beetles) {
+    if (b.dead) continue;
+    if (Math.abs(P.x - b.x) < PR + 0.5 && Math.abs(P.z - b.z) < PR + 0.55 && P.y < b.top + 0.85 && P.y + PH > b.top + 0.1) {
+      if (P.vy < 0 && P.prev[1] >= b.top + 0.45) {
+        b.dead = true; b.squish = 0; P.vy = tune.stomp_bounce; P.jumping = false; P.squash = -0.2;
+        sfx.stomp(); puff(b.x, b.top, b.z, 6, 2.5); events.push({ type: 'stomp' });
+      } else { die('beetle'); return; }
+    }
+  }
+  // Spiky balls: always hurt; slip past while they bounce high.
+  for (const s of spikies) {
+    const cy = Math.max(P.y + 0.3, Math.min(P.y + PH - 0.3, s.y));
+    if (Math.hypot(P.x - s.x, cy - s.y, P.z - s.z) < 0.3 + 0.45) { die('spiky'); return; }
+  }
+  const [, cy] = cpPos();
+  if (P.y < Math.min(cy, P.gy) - tune.fall_limit) die('fall');
+}
+function updateCamera(dt) {
+  camS.prevYaw = camS.yaw; camS.prevF = [camS.fx, camS.fy, camS.fz];
+  if (down.has('KeyQ')) camS.yaw += tune.cam_turn_speed * dt;
+  if (down.has('KeyE')) camS.yaw -= tune.cam_turn_speed * dt;
+  camS.yaw += yawInput; yawInput = 0;
+  // Hold still through ordinary jumps: follow the height the hero stands on, and falls below it.
+  if (P.ground) camS.gy = P.y; else if (P.y < camS.gy) camS.gy = P.y; else if (P.y > camS.gy + 3) camS.gy = P.y - 3;
+  const k = 1 - Math.exp(-tune.cam_follow * dt), kl = 1 - Math.exp(-3 * dt);
+  camS.lax += (P.vx * tune.cam_lookahead - camS.lax) * kl; camS.laz += (P.vz * tune.cam_lookahead - camS.laz) * kl;
+  camS.fx += (P.x + camS.lax - camS.fx) * k; camS.fz += (P.z + camS.laz - camS.fz) * k;
+  camS.fy += (camS.gy + 1.2 - camS.fy) * (1 - Math.exp(-5 * dt));
+}
+function updateDust(dt) {
+  for (const d of dust) {
+    if (d.life <= 0) continue; d.life -= dt;
+    d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; d.vx *= 0.9; d.vz *= 0.9; d.vy -= 3 * dt;
+  }
+}
+function hintFor(z) { const h = LEVEL.hints.find(([a, b]) => z <= a && z >= b); return h ? h[2] : ''; }
+
+// ---- Drawing ----------------------------------------------------------------------------
+const lerp = (a, b, t) => a + (b - a) * t;
+let ALPHA = 1; // how far the frame is between the last two steps
+function placeCamera(fx, fy, fz, yaw) {
+  const d = tune.cam_distance, p = tune.cam_pitch;
+  cam.position.set(fx + Math.sin(yaw) * Math.cos(p) * d, fy + Math.sin(p) * d, fz + Math.cos(yaw) * Math.cos(p) * d);
+  cam.lookAt(fx, fy, fz);
+}
+function render3D(mode) {
+  const a = ALPHA, t = state.t;
+  for (const m of movers) m.g.position.set(lerp(m.prev[0], m.x, a), m.top, lerp(m.prev[1], m.z, a));
+  for (const tl of tiles) {
+    tl.g.visible = tl.phase !== 'gone';
+    const sh = tl.phase === 'shake' ? Math.sin(t * 70) * 0.06 : 0; tl.g.position.set(tl.x + sh, 0, tl.z);
+  }
+  for (const b of beetles) {
+    const bx = lerp(b.prev[0], b.x, a), bz = lerp(b.prev[1], b.z, a);
+    b.group.position.set(bx, b.top, bz);
+    if (b.x !== b.prev[0] || b.z !== b.prev[1]) b.group.rotation.y = Math.atan2(b.x - b.prev[0], b.z - b.prev[1]);
+    b.body.position.y = b.dead ? 0 : Math.abs(Math.sin(t * 12)) * 0.06;
+    b.body.scale.set(1, b.dead ? 0.25 : 1, 1); b.group.visible = !b.dead || b.squish < 0.4;
+  }
+  for (const s of spikies) {
+    s.group.position.set(s.x, lerp(s.prevY, s.y, a), s.z); s.body.rotation.y = t * 1.5;
+    const low = s.y - s.top < 0.9; s.body.scale.set(low ? 1.12 : 1, low ? 0.88 : 1, low ? 1.12 : 1);
+  }
+  for (const c of checkpoints) c.flag.rotation.y = Math.sin(t * 3 + c.z) * 0.25;
+  goal.flag.rotation.y = Math.sin(t * 2.5) * 0.2; goal.star.rotation.y = t * 2; goal.star.position.y = 4.5 + Math.sin(t * 3) * 0.15;
+  // The hero, between steps.
+  const hx = lerp(P.prev[0], P.x, a), hy = lerp(P.prev[1], P.y, a), hz = lerp(P.prev[2], P.z, a);
+  hero.group.position.set(hx, hy, hz); hero.group.rotation.y = P.facing;
+  const sq = P.squash; hero.body.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5);
+  const speed = Math.hypot(P.vx, P.vz);
+  hero.cape.rotation.x = 0.18 + Math.min(0.9, speed * 0.08) + (P.ground ? 0 : 0.3);
+  hero.body.rotation.x = P.ground ? Math.min(0.15, speed * 0.02) : 0;
+  hero.body.position.y = P.ground && speed > 1 ? Math.abs(Math.sin(t * 16)) * 0.06 : 0;
+  // The round shadow under the feet: on the highest top below the hero.
+  let best = null;
+  for (const s of solids) if (s.on && hx > s.minx && hx < s.maxx && hz > s.minz && hz < s.maxz && s.top <= hy + 0.05 && (!best || s.top > best.top)) best = s;
+  blob.visible = !!best && mode !== 'figures';
+  if (best) { const h = hy - best.top, k = Math.max(0.35, 1 - h * 0.12); blob.position.set(hx, best.top + 0.02, hz); blob.scale.setScalar(k); blob.material.opacity = 0.45 * k; }
+  for (const d of dust) { d.m.visible = d.life > 0; if (d.life > 0) { d.m.position.set(d.x, d.y, d.z); d.m.scale.setScalar(d.life / 0.4); d.m.rotation.y = d.life * 9; } }
+  // Camera.
+  if (mode === 'title') {
+    const ang = t * 0.15; cam.position.set(Math.sin(ang) * 20, 12, -18 + Math.cos(ang) * 20); cam.lookAt(0, 1, -22);
+  } else if (mode === 'figures') {
+    cam.position.set(300, 3.2, 10); cam.lookAt(300, 1.2, 0);
+  } else {
+    placeCamera(lerp(camS.prevF[0], camS.fx, a), lerp(camS.prevF[1], camS.fy, a), lerp(camS.prevF[2], camS.fz, a), lerp(camS.prevYaw, camS.yaw, a));
+  }
+  const focus = mode === 'figures' ? [300, 0, 0] : mode === 'title' ? [0, 0, -22] : [hx, hy, hz];
+  sun.position.set(focus[0] + 12, focus[1] + 25, focus[2] + 8); sun.target.position.set(focus[0], focus[1], focus[2]);
+  renderer.render(scene3, cam);
+}
+function fmtTime(s) { const m = Math.floor(s / 60), r = s - m * 60; return `${m}:${r < 10 ? '0' : ''}${r.toFixed(1)}`; }
+function drawHUD() {
+  ctx.clearRect(0, 0, W, H);
+  panel(20, 18, 300, 92, 0.45);
+  text(`체크포인트 ${state.cp} / ${checkpoints.length}`, 40, 46, 24, '#ffffff', 'left');
+  text(`시간 ${fmtTime(state.t)}   ·   실수 ${state.falls}`, 40, 84, 20, '#ffe9c4', 'left', 600);
+  if (muted) text('음소거', W - 30, 40, 18, '#ffffff', 'right', 600);
+  const hint = hintFor(P.z);
+  if (hint && state.cp < 3) { panel(W / 2 - 200, H - 82, 400, 52, 0.45); text(hint, W / 2, H - 56, 24, '#ffffff'); }
+  if (state.fade > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, state.fade / 0.35) * 0.8})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---- Scenes ------------------------------------------------------------------------------
+const scenes = {
+  figures: {
+    update(dt) { state.t += dt; },
+    draw() {
+      render3D('figures'); ctx.clearRect(0, 0, W, H);
+      const v = new THREE.Vector3();
+      lineup.names.forEach((n, i) => { v.set(300 + lineup.xs[i], -0.6, 1.8).project(cam); text(n, (v.x + 1) / 2 * W, (1 - v.y) / 2 * H, 26, '#ffffff'); });
+    },
+  },
+  title: {
+    update(dt) { state.t += dt; if (pressed('Enter') || pressed('Space')) { reset(); scene = 'play'; } },
+    draw() {
+      render3D('title'); ctx.clearRect(0, 0, W, H);
+      panel(W / 2 - 330, 110, 660, 470, 0.5);
+      text(TITLE, W / 2, 190, 76, '#ffffff');
+      text('하늘섬을 건너 마지막 황금 깃발까지', W / 2, 262, 28, '#ffe0a8', 'center', 600);
+      CONTROLS.forEach((c, i) => text(c, W / 2, 340 + i * 44, 24, '#ffffff', 'center', 600));
+      if (Math.floor(state.t * 2) % 2 === 0) text('Enter 또는 Space로 시작', W / 2, 532, 28, '#ffd34a');
+    },
+  },
+  play: {
+    update(dt) {
+      if (pressed('KeyP') || pressed('Escape')) { scene = 'pause'; return; }
+      state.t += dt;
+      updateWorld(dt); updateHero(dt); checkTouches(); updateCamera(dt); updateDust(dt);
+      if (state.fade > 0) state.fade -= dt;
+    },
+    draw() { render3D('play'); drawHUD(); },
+  },
+  pause: {
+    update() { if (pressed('KeyP') || pressed('Escape')) scene = 'play'; },
+    draw() {
+      scenes.play.draw(); ctx.fillStyle = 'rgba(30,20,50,0.45)'; ctx.fillRect(0, 0, W, H);
+      text('일시정지', W / 2, H / 2 - 20, 56, '#ffffff'); text('P를 눌러 계속', W / 2, H / 2 + 40, 26, '#ffe0a8', 'center', 600);
+    },
+  },
+  results: {
+    update(dt) { goal.star.rotation.y += dt; if (pressed('Enter')) { reset(); scene = 'play'; } },
+    draw() {
+      render3D('play'); ctx.clearRect(0, 0, W, H);
+      panel(W / 2 - 280, H / 2 - 150, 560, 300, 0.6);
+      text(state.gained || '클리어!', W / 2, H / 2 - 88, 64, '#ffd34a');
+      text(`기록 ${fmtTime(state.t)}`, W / 2, H / 2 - 10, 32, '#ffffff');
+      text(`실수 ${state.falls}회`, W / 2, H / 2 + 36, 28, '#ffe0a8', 'center', 600);
+      text('Enter: 다시 하기', W / 2, H / 2 + 100, 26, '#ffffff', 'center', 600);
+    },
+  },
+};
+
+// ---- Loop: fixed step, frame time clamped ---------------------------------------------
+function step() {
+  if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  scenes[scene].update(STEP); hit.clear();
+}
+let last, acc = 0;
+function tick() {
+  const now = clock.now();
+  acc += Math.min(now - last, 0.25); last = now; // a stall never fast-forwards the game
+  while (acc >= STEP) { step(); acc -= STEP; }
+  ALPHA = acc / STEP; // draw between steps, so the view never judders
+  drawFrame();
+}
+function drawFrame() { scenes[scene].draw(); }
+function frame() { tick(); requestAnimationFrame(frame); }
+// A headless browser on a time budget runs timers but almost no animation frames: a timer
+// ticks when no frame has come for 100 ms on a visible page; a hidden tab stays paused.
+function timer() { if (document.visibilityState === 'visible' && clock.now() - last > 0.1) tick(); }
+
+// ---- What a check can read and drive (?manual=1 stops the loop; players never see it) ----
+window.game = {
+  get scene() { return scene; },
+  get state() { return Object.assign({}, state, { hero: { x: P.x, y: P.y, z: P.z, grounded: !!P.ground } }); },
+  press(code) { hit.add(code); },
+  hold(code, on) { on ? down.add(code) : down.delete(code); },
+  get events() { return events; }, // the loop steps; a check empties it
+  step(n = 1, draw = true, alpha = 1) {
+    for (let i = 0; i < n; i++) step();
+    if (draw) { ALPHA = alpha; drawFrame(); }
+  },
+};
+
+reset();
+scene = params.get('scene') || 'title';
+last = clock.now();
+if (params.get('manual') === '1') drawFrame();
+else { requestAnimationFrame(frame); setInterval(timer, 50); }
+</script>
+</body>
+</html>
