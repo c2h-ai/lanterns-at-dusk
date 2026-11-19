@@ -427,53 +427,93 @@ reedMat.onBeforeCompile = sh => {
   });
   reeds.castShadow = true; heads.castShadow = true; scene3.add(reeds, heads);
 }
-// Old mooring posts in the first basin, and the dock the trip starts from.
+// Old mooring posts in the first basin, and the dock the trip starts from. Both stop the boat.
+const POSTS = [], BOXES = [];
 for (let i = 0; i < 12; i++) {
   const a = hash2(i, 5) * Math.PI * 2, r = 12 + hash2(i, 6) * 22, x = Math.cos(a) * r, z = Math.sin(a) * r;
   if (Math.hypot(x - START.x, z - START.z) < 8) continue;
-  const p = mesh(new THREE.CylinderGeometry(0.16, 0.2, 3 + hash2(i, 7) * 2, 6), C.woodDark, x, 0.6, z, scene3);
+  const p = mesh(new THREE.CylinderGeometry(0.16, 0.2, 3 + hash2(i, 7) * 2, 6), C.woodDark, x, 0.6, z, scene3); POSTS.push([x, z, 0.25]);
   p.rotation.set((hash2(i, 8) - 0.5) * 0.3, 0, (hash2(i, 9) - 0.5) * 0.3);
 }
 {
   const dock = new THREE.Group(); scene3.add(dock);
-  for (let k = 0; k < 9; k++) mesh(new THREE.BoxGeometry(2.4, 0.12, 0.5), k % 2 ? C.wood : 0x6a3e2c, 0, 0.75, 30 + k * 0.6, dock);
-  for (const [x, z] of [[-1.1, 30], [1.1, 30], [-1.1, 34.6], [1.1, 34.6]]) mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.4, 6), C.woodDark, x, 0, z, dock);
+  // The dock reaches from deep water all the way up onto the bank.
+  let shoreZ = 30; while (shoreZ < 70 && waterSd(0, shoreZ, false) < 0.5) shoreZ += 0.5;
+  for (let z = 30, k = 0; z < shoreZ + 1.5; z += 0.6, k++) mesh(new THREE.BoxGeometry(2.4, 0.12, 0.5), k % 2 ? C.wood : 0x6a3e2c, 0, 0.75, z, dock);
+  for (let z = 30; z < shoreZ + 1; z += 2.4) for (const x of [-1.1, 1.1]) mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.6, 6), C.woodDark, x, -0.2, z, dock);
   const post = mesh(new THREE.CylinderGeometry(0.06, 0.06, 2, 5), C.woodDark, 1.1, 1.8, 30, dock);
   mesh(new THREE.OctahedronGeometry(0.12, 0), glowMat(C.glow, 1.2), 1.1, 2.85, 30, dock);
+  BOXES.push([-1.3, 1.3, 29.6, shoreZ + 1.5]);
 }
 
-// The boat and the ferryman, who sculls with one long oar at the stern. Faces -z.
+// The boat and the ferryman. A plank-built skiff with ribs, a curled stem and a stern post; the
+// ferryman wears a wide reed hat and a long coat, and sculls one long oar over the stern. Faces -z.
+function tube(points, r, color, parent, seg = 24) {
+  const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)));
+  return mesh(new THREE.TubeGeometry(curve, seg, r, 6, false), color, 0, 0, 0, parent);
+}
 function makeBoat() {
-  const g = new THREE.Group(), N = 14, L = 1.9, pts = [], idx = [];
-  for (let i = 0; i <= N; i++) {
-    const z = -L + (2 * L * i) / N, t = Math.abs(z) / L, w = 0.72 * Math.pow(Math.max(0, 1 - t * t), 0.6), lift = 0.25 * t * t;
-    for (const [sx, y] of [[-1, 0.42], [-0.85, 0.1], [0, -0.12], [0.85, 0.1], [1, 0.42]]) pts.push(sx * w, y + lift * (y > 0.3 ? 1.4 : 1), z);
+  const g = new THREE.Group(), N = 26, K = 10, L = 1.95;
+  // Hull: cross-sections along the length, one colour per plank strake.
+  const half = z => { const t = Math.abs(z) / L; return { w: 0.74 * Math.pow(Math.max(0, 1 - t * t), 0.55), d: 0.5 * (1 - t * t * 0.55), lift: 0.32 * t * t * (z < 0 ? 1.25 : 1) }; };
+  const P = (i, k) => { const z = -L + 2 * L * i / N, { w, d, lift } = half(z), a = Math.PI * k / K; return [-Math.cos(a) * w, 0.45 + lift - Math.sin(a) * d * (1 - lift * 0.4), z]; };
+  const pos = [], col = [], shades = [new THREE.Color(0x8a5236), new THREE.Color(0x6e3f2a), new THREE.Color(0x9a6040)];
+  for (let i = 0; i < N; i++) for (let k = 0; k < K; k++) {
+    const a = P(i, k), b = P(i + 1, k), c = P(i, k + 1), d = P(i + 1, k + 1), sh = shades[Math.min(k, K - 1 - k) % 3];
+    for (const v of [a, b, c, c, b, d]) { pos.push(...v); col.push(sh.r, sh.g, sh.b); }
   }
-  for (let i = 0; i < N; i++) for (let j = 0; j < 4; j++) { const a = i * 5 + j, b = a + 5; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-  const hull = new THREE.BufferGeometry(); hull.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); hull.setIndex(idx); hull.computeVertexNormals();
-  mesh(hull, new THREE.MeshStandardMaterial({ color: C.wood, flatShading: true, side: THREE.DoubleSide, roughness: 0.85 }), 0, 0, 0, g);
-  for (const sx of [-1, 1]) { const rim = mesh(new THREE.BoxGeometry(0.06, 0.06, 3.0), 0x7a4a30, sx * 0.62, 0.45, 0, g); rim.rotation.y = sx * 0.02; }
-  for (const z of [-0.7, 0.5]) mesh(new THREE.BoxGeometry(1.15, 0.06, 0.32), 0x7a4a30, 0, 0.3, z, g);
-  // Lantern pole curving over the bow.
-  const pole = mesh(new THREE.CylinderGeometry(0.03, 0.035, 1.6, 5), C.woodDark, 0, 1.05, -1.45, g); pole.rotation.x = -0.35;
-  const arm = mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.6, 5), C.woodDark, 0, 1.78, -1.95, g); arm.rotation.x = Math.PI / 2;
-  const lamp = new THREE.Group(); lamp.position.set(0, 1.55, -2.2); g.add(lamp);
-  mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.32, 6), glowMat(C.paper, 3), 0, 0, 0, lamp);
-  mesh(new THREE.ConeGeometry(0.17, 0.12, 6), C.woodDark, 0, 0.22, 0, lamp);
-  // The ferryman: a tall hooded figure with a scarf that trails in the wind.
-  const man = new THREE.Group(); man.position.set(0, 0.25, 1.05); g.add(man);
-  mesh(new THREE.CylinderGeometry(0.18, 0.42, 1.25, 7), C.cloak, 0, 0.65, 0, man);
-  mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.18, 7), C.cloakLight, 0, 1.3, 0, man);
-  mesh(new THREE.IcosahedronGeometry(0.17, 1), C.skin, 0, 1.5, -0.04, man);
-  const hood = mesh(new THREE.ConeGeometry(0.26, 0.55, 7), C.cloakLight, 0, 1.66, 0.04, man); hood.rotation.x = 0.25;
-  const scarf = new THREE.Group(); scarf.position.set(0.05, 1.32, 0.12); man.add(scarf);
-  const tail = mesh(new THREE.BoxGeometry(0.14, 0.04, 0.9), C.red, 0, 0, 0.45, scarf);
-  for (const sx of [-1, 1]) { const armM = mesh(new THREE.BoxGeometry(0.11, 0.55, 0.12), C.cloak, sx * 0.24, 1.0, -0.05, man); armM.rotation.x = -0.6; }
-  const oar = new THREE.Group(); oar.position.set(0.15, 1.05, 0.15); man.add(oar);
-  mesh(new THREE.CylinderGeometry(0.03, 0.03, 3.4, 5), 0x8a5a3a, 0, -1.5, 0, oar);
-  mesh(new THREE.BoxGeometry(0.05, 0.6, 0.22), 0x8a5a3a, 0, -3.1, 0, oar);
-  oar.rotation.x = 0.75;
-  return { group: g, lamp, oar, scarf, man };
+  const hull = new THREE.BufferGeometry(); hull.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  hull.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); hull.computeVertexNormals();
+  mesh(hull, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide, roughness: 0.8 }), 0, 0, 0, g);
+  // Gunwales along both top edges, ribs inside, floorboards and two thwarts.
+  for (const k of [0, K]) tube(Array.from({ length: N + 1 }, (_, i) => { const p = P(i, k); return [p[0] * 1.02, p[1] + 0.03, p[2]]; }), 0.045, 0x5a3020, g, 40);
+  for (let i = 3; i < N - 2; i += 3) tube(Array.from({ length: K + 1 }, (_, k) => { const p = P(i, k); return [p[0] * 0.93, p[1] + 0.02, p[2]]; }), 0.022, 0x4a2a1c, g, 12);
+  mesh(new THREE.BoxGeometry(0.5, 0.03, 2.6), 0x7a4a30, 0, 0.0, 0.05, g);
+  for (const z of [-0.75, 0.25]) { const z0 = half(z); mesh(new THREE.BoxGeometry(z0.w * 1.9, 0.06, 0.3), 0x9a6644, 0, 0.36, z, g); }
+  // Curled stem at the bow and a stern post with the oarlock.
+  tube([[0, 0.55, -L - 0.02], [0, 0.85, -L - 0.12], [0, 1.08, -L - 0.08], [0, 1.15, -L + 0.06], [0, 1.06, -L + 0.12]], 0.05, 0x5a3020, g, 16);
+  tube([[0, 0.5, L - 0.05], [0, 0.72, L + 0.04], [0, 0.88, L + 0.06]], 0.06, 0x5a3020, g, 8);
+  mesh(new THREE.TorusGeometry(0.07, 0.02, 5, 8), 0x2e1a1e, 0, 0.92, L + 0.06, g).rotation.x = Math.PI / 2;
+  // Cargo: a crate, a sack and a coil of rope.
+  mesh(new THREE.BoxGeometry(0.42, 0.32, 0.36), 0x9a6a42, 0.12, 0.2, -0.3, g).rotation.y = 0.3;
+  const sack = mesh(new THREE.IcosahedronGeometry(0.22, 1), 0xb89a70, -0.2, 0.18, -0.45, g); sack.scale.set(1, 0.7, 1.2);
+  mesh(new THREE.TorusGeometry(0.15, 0.04, 5, 12), 0xc8a874, -0.15, 0.1, 0.62, g).rotation.x = Math.PI / 2;
+  // Lantern pole bending over the bow, the lamp on a short chain.
+  tube([[0.0, 0.4, -1.25], [0.0, 1.2, -1.45], [0.0, 1.85, -1.85], [0.0, 1.95, -2.25]], 0.035, 0x3a2218, g, 16);
+  const lamp = new THREE.Group(); lamp.position.set(0, 1.92, -2.25); g.add(lamp);
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.22, 3), 0x2e1a1e, 0, -0.11, 0, lamp);
+  const body = new THREE.Group(); body.position.y = -0.4; lamp.add(body);
+  mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.3, 6), glowMat(C.paper, 3), 0, 0, 0, body);
+  mesh(new THREE.ConeGeometry(0.17, 0.12, 6), C.woodDark, 0, 0.21, 0, body);
+  mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.05, 6), C.woodDark, 0, -0.17, 0, body);
+  // The stern oar: pivots on the oarlock, blade trailing in the water, handle toward the ferryman.
+  const oar = new THREE.Group(); oar.position.set(0, 0.95, L + 0.06); oar.rotation.order = 'YXZ'; g.add(oar);
+  mesh(new THREE.CylinderGeometry(0.03, 0.035, 4.2, 6), 0x9a6a42, 0, 0, 1.1, oar).rotation.x = Math.PI / 2;
+  mesh(new THREE.BoxGeometry(0.05, 0.24, 0.8), 0x9a6a42, 0, 0, 3.0, oar);
+  const handle = new THREE.Object3D(); handle.position.set(0, 0, -0.95); oar.add(handle);
+  // The ferryman.
+  const man = new THREE.Group(); man.position.set(0, 0.06, 1.5); g.add(man);
+  const coatPts = [[0.001, 1.52], [0.17, 1.5], [0.2, 1.38], [0.24, 1.15], [0.27, 0.85], [0.33, 0.5], [0.4, 0.15], [0.43, 0.02]].map(([r, y]) => new THREE.Vector2(r, y));
+  mesh(new THREE.LatheGeometry(coatPts, 10), C.cloak, 0, 0, 0, man);
+  mesh(new THREE.CylinderGeometry(0.26, 0.29, 0.1, 10), 0x6a4a3a, 0, 0.92, 0, man); // sash
+  const sashTail = mesh(new THREE.BoxGeometry(0.08, 0.4, 0.03), 0x6a4a3a, 0.16, 0.72, 0.24, man); sashTail.rotation.z = 0.15;
+  mesh(new THREE.CylinderGeometry(0.21, 0.24, 0.16, 10), C.cloakLight, 0, 1.5, 0, man); // collar
+  const head = new THREE.Group(); head.position.set(0, 1.68, 0); man.add(head);
+  mesh(new THREE.IcosahedronGeometry(0.15, 1), C.skin, 0, 0, 0, head);
+  mesh(new THREE.BoxGeometry(0.2, 0.08, 0.1), 0x3a2a2a, 0, -0.07, -0.1, head); // beard shadow
+  const hat = mesh(new THREE.ConeGeometry(0.58, 0.3, 14), 0xc8a060, 0, 0.17, 0, head);
+  mesh(new THREE.TorusGeometry(0.17, 0.025, 4, 12), C.red, 0, 0.1, 0, head).rotation.x = Math.PI / 2;
+  const scarf = new THREE.Group(); scarf.position.set(0.06, 1.48, 0.18); man.add(scarf);
+  mesh(new THREE.BoxGeometry(0.13, 0.03, 0.55), C.red, 0, 0, 0.27, scarf);
+  mesh(new THREE.BoxGeometry(0.1, 0.03, 0.45), C.red, -0.1, -0.06, 0.22, scarf).rotation.y = 0.2;
+  // Arms reach for the oar handle each frame (render3D aims them).
+  const arms = [-1, 1].map(sx => {
+    const a = new THREE.Group(); a.position.set(sx * 0.22, 1.38, 0); man.add(a);
+    mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.62, 6), C.cloak, 0, 0, 0.31, a).rotation.x = Math.PI / 2;
+    mesh(new THREE.SphereGeometry(0.06, 6, 4), C.skin, 0, 0, 0.64, a);
+    return a;
+  });
+  return { group: g, lamp, oar, scarf, man, head, arms, handle };
 }
 const boat = makeBoat(); scene3.add(boat.group);
 const boatLight = new THREE.PointLight(0xffa050, 14, 18, 1.5); scene3.add(boatLight);
@@ -527,6 +567,7 @@ for (const [a, b] of BRIDGES) {
 }
 
 // Gates: two stone posts, a beam, and a plank barrier that rises when the basin is all lit.
+const GATE_POSTS = [];
 const gateObjs = GATES.map(gd => {
   const g = new THREE.Group(); g.position.set(gd.x, 0, gd.z); g.rotation.y = Math.atan2(gd.dx, gd.dz); scene3.add(g);
   for (const sx of [-1, 1]) {
@@ -534,6 +575,7 @@ const gateObjs = GATES.map(gd => {
     mesh(new THREE.BoxGeometry(1.7, 0.4, 1.7), C.stoneLight, sx * (CHANNEL_R + 1.2), 6.6, 0, g);
   }
   mesh(new THREE.BoxGeometry(2 * CHANNEL_R + 4.6, 0.8, 1), C.stone, 0, 7.2, 0, g);
+  for (const sx of [-1, 1]) GATE_POSTS.push([gd.x - gd.dz * sx * (CHANNEL_R + 1.2), gd.z + gd.dx * sx * (CHANNEL_R + 1.2), 1.0]);
   const lamps = [-1, 1].map(sx => { const m = glowMat(0xffb060, 0.05); mesh(new THREE.OctahedronGeometry(0.3, 0), m, sx * (CHANNEL_R + 1.2), 7.3, 0, g); return m; });
   const bar = new THREE.Group(); g.add(bar);
   for (let k = -7; k <= 7; k++) mesh(new THREE.BoxGeometry(1.0, 3.6, 0.25), k % 2 ? C.woodDark : C.wood, k * 1.12, 0.9, 0, bar);
@@ -642,16 +684,26 @@ function updateBoat(dt) {
   let [fx, fz] = forward(B.heading), rx = -fz, rz = fx;
   B.x += (fx * B.v + rx * B.side) * dt; B.z += (fz * B.v + rz * B.side) * dt;
   // Shores and gates: the lake's distance field pushes the hull back into open water.
-  const BR = 1.6, d = waterSd(B.x, B.z, true);
-  if (d > -BR) {
-    const e = 0.15, gx = (waterSd(B.x + e, B.z, true) - waterSd(B.x - e, B.z, true)) / (2 * e), gz = (waterSd(B.x, B.z + e, true) - waterSd(B.x, B.z - e, true)) / (2 * e);
-    const gl = Math.hypot(gx, gz) || 1; collide(gx / gl, gz / gl, d + BR);
-  }
-  for (const [hx, hz] of HOUSES) circle(hx, hz, 2.4);
-  for (const l of lanterns) if (l.rise === 0) circle(l.x, l.z, 0.9);
-  function circle(cx, cz, r) {
-    const dx = B.x - cx, dz = B.z - cz, dd = Math.hypot(dx, dz), m = r + 1.2;
-    if (dd < m && dd > 0) collide(-dx / dd, -dz / dd, m - dd);
+  // The hull is three circles (bow, middle, stern) tested against shores, gates, posts and the dock.
+  const HULL = [[1.35, 0.55], [0, 0.85], [-1.35, 0.6]];
+  for (const [off, r] of HULL) {
+    const px = () => B.x + fx * off, pz = () => B.z + fz * off;
+    const d = waterSd(px(), pz(), true);
+    if (d > -r) {
+      const e = 0.15, x0 = px(), z0 = pz();
+      const gx = (waterSd(x0 + e, z0, true) - waterSd(x0 - e, z0, true)) / (2 * e), gz = (waterSd(x0, z0 + e, true) - waterSd(x0, z0 - e, true)) / (2 * e);
+      const gl = Math.hypot(gx, gz) || 1; collide(gx / gl, gz / gl, d + r);
+    }
+    const obstacles = [...HOUSES.map(([x, z]) => [x, z, 2.4]), ...POSTS, ...GATE_POSTS, ...lanterns.filter(l => l.rise === 0).map(l => [l.x, l.z, 0.6])];
+    for (const [cx, cz, cr] of obstacles) {
+      const dx = px() - cx, dz = pz() - cz, dd = Math.hypot(dx, dz), m = cr + r;
+      if (dd < m && dd > 0) collide(-dx / dd, -dz / dd, m - dd);
+    }
+    for (const [x0, x1, z0, z1] of BOXES) {
+      const qx = clamp(px(), x0, x1), qz = clamp(pz(), z0, z1), dx = px() - qx, dz = pz() - qz, dd = Math.hypot(dx, dz);
+      if (dd < r && dd > 0) collide(-dx / dd, -dz / dd, r - dd);
+      else if (dd === 0) { const c = (x0 + x1) / 2, sx = px() < c ? -1 : 1; collide(-sx, 0, (sx < 0 ? px() - x0 : x1 - px()) + r); }
+    }
   }
   function collide(nx, nz, pen) { // n points into the obstacle
     B.x -= nx * pen; B.z -= nz * pen;
@@ -744,10 +796,16 @@ function render3D(mode) {
   const bob = Math.sin(t * 1.3) * 0.05;
   boat.group.position.set(bx, bob, bz); boat.group.rotation.set(Math.sin(t * 1.1) * 0.02 - B.power * 0.02, bh, -B.yawRate * 0.12 + Math.sin(t * 0.9) * 0.025);
   const f = B.phase % 1;
-  boat.oar.rotation.set(0.75 + Math.cos(f * Math.PI * 2) * 0.08, Math.sin(f * Math.PI * 2) * 0.55, 0);
-  boat.man.rotation.y = Math.sin(f * Math.PI * 2) * 0.12;
-  boat.scarf.rotation.set(0.25 + Math.sin(t * 3) * 0.12, Math.sin(t * 2.1) * 0.3 + B.yawRate * 0.5, 0);
-  boat.lamp.rotation.z = Math.sin(t * 1.7) * 0.08;
+  // Sculling: the oar sweeps side to side; the ferryman leans into it and his hands follow the handle.
+  const sw = Math.sin(f * Math.PI * 2), idle = Math.sin(t * 0.8) * 0.06;
+  boat.oar.rotation.set(0.38 + Math.cos(f * Math.PI * 2) * 0.05, (B.power > 0 || f > 0.01 ? sw * 0.38 : idle) - B.yawRate * 0.4, 0);
+  boat.man.rotation.set(-0.06 - B.power * 0.05, -sw * 0.18, sw * 0.05);
+  boat.head.rotation.set(0.05, sw * 0.12 + B.yawRate * 0.4, 0);
+  boat.group.updateMatrixWorld(true);
+  boat.handle.getWorldPosition(tmpV);
+  for (const arm of boat.arms) arm.lookAt(tmpV);
+  boat.scarf.rotation.set(0.2 + Math.sin(t * 3.1) * 0.15 + B.v * 0.03, Math.sin(t * 2.1) * 0.3 + B.yawRate * 0.6, Math.sin(t * 4.3) * 0.1);
+  boat.lamp.rotation.set(B.power * 0.12 + Math.sin(t * 1.3) * 0.05, 0, Math.sin(t * 1.7) * 0.1 + B.yawRate * 0.3);
   boat.lamp.getWorldPosition(tmpV); boatLight.position.copy(tmpV);
   const lampPos = tmpV.clone();
   // Lanterns: bob, glimmer when near and unlit, flicker when lit, rise at the end.
@@ -778,7 +836,7 @@ function render3D(mode) {
   if (mode === 'title') {
     cam.position.set(Math.sin(t * 0.05) * 7, 4.2 + Math.sin(t * 0.13) * 0.4, 40); cam.lookAt(0, 3.5, -40);
   } else if (mode === 'figures') {
-    cam.position.set(600, 3.8, 15); cam.lookAt(600, 1.8, 0);
+    cam.position.set(600, 3.4, -13); cam.lookAt(600, 1.6, 0);
   } else {
     const yaw = camS.prevYaw + Math.atan2(Math.sin(camS.yaw - camS.prevYaw), Math.cos(camS.yaw - camS.prevYaw)) * a;
     const end = state.ending >= 0 ? smooth(0, 9, state.ending) : 0;
@@ -853,7 +911,7 @@ const scenes = {
     update(dt) { state.t += dt; },
     draw() {
       render3D('figures'); ctx.clearRect(0, 0, W, H);
-      lineup.names.forEach((n, i) => { tmpV.set(600 + lineup.xs[i], -0.6, 2.5).project(cam); text(n, (tmpV.x + 1) / 2 * W, (1 - tmpV.y) / 2 * H, 26, '#fff3e2', 'center', SERIF, 700); });
+      lineup.names.forEach((n, i) => { tmpV.set(600 + lineup.xs[i], -0.6, -2.5).project(cam); text(n, (tmpV.x + 1) / 2 * W, (1 - tmpV.y) / 2 * H, 26, '#fff3e2', 'center', SERIF, 700); });
     },
   },
   title: {
