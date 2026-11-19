@@ -34,5 +34,12 @@ window.CONFIG = {
   vanish_delay: { value: 0.6, min: 0.2, max: 2, step: 0.05 },      // s a crumbling tile holds once stood on
   vanish_return: { value: 2.5, min: 0.5, max: 6, step: 0.1 },      // s before it comes back
   fall_limit: { value: 9, min: 4, max: 20, step: 1 },              // m below the checkpoint that counts as a fall
+  // ---- Look: light and post effects ----
+  sun_elevation: { value: 16, min: 2, max: 70, step: 1 },         // degrees above the horizon (low = golden hour)
+  sun_azimuth: { value: 110, min: 0, max: 360, step: 5 },          // degrees around the course
+  exposure: { value: 1, min: 0.2, max: 1.5, step: 0.02 },       // tone-mapping exposure
+  bloom_strength: { value: 0.4, min: 0, max: 2, step: 0.05 },      // glow around bright things
+  bloom_threshold: { value: 1.2, min: 0, max: 3, step: 0.05 },    // how bright before it glows
+  ao_strength: { value: 1, min: 0, max: 1, step: 0.05 },           // shade in creases and contact points
   volume: { value: 0.5, min: 0, max: 1, step: 0.05 },
 };
