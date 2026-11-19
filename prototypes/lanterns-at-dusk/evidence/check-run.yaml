@@ -1,0 +1,116 @@
+# The one-shot's small check (check-run/1).
+# Written by one-shot-check.sh --record: the results are /prototype's reading of
+# evidence/self-check.tsv; never edited by hand.
+kind: check-run/1
+engine: web
+browser: "HeadlessChrome/157.0.0.0"
+time: "2026-11-19 11:00:02"
+checks:
+  - id: boots
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: shot
+    result: pass
+    evidence:
+      - "evidence/play.png"
+  - id: outlines
+    result: pass
+    evidence:
+      - "evidence/figures.png"
+  - id: brief-words
+    result: pass
+    evidence:
+      - "evidence/brief-words.tsv"
+  - id: emoji
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: nearest-game
+    result: pass
+    evidence:
+      - "evidence/nearest-game.txt"
+brief_checklist:
+  - id: L1
+    result: pass
+    evidence: "evidence/full-play.png"
+    item: "Look: 붉은 노을빛 회화풍 3D. 수평선 근처의 거대한 낮은 해, 진홍에서 주황, 보라로 번지는 하늘, 하늘을 거울처럼 비추며 잔물결에 금빛 길이 일렁이는 수면, 멀리 겹겹이 흐려지는 실루엣. 배와 사공은 짙은 남색 실루엣에 등불 하나만 따뜻하게 빛난다. 대표 디테일은 노를 저을 때마다 퍼지는 물결 고리와 수면에 길게 늘어지는 등불 반사광. 모든 형체는 그려서 만들고 이모지나 맨 원은 쓰지 않는다. *(provisional)*"
+  - id: L2
+    result: pass
+    evidence: "evidence/full-play.png"
+    item: "References: What the Water Keeps (노을 호수의 빛, 나룻배로 장면을 지나는 흐름) *(you said)*, Journey (말 없이 큰 풍경을 향해 가는 감정선) *(guessed)*"
+  - id: L3
+    result: pass
+    evidence: "evidence/full-play.png"
+    item: "View: 3D · Camera: 배 뒤 위쪽에서 따라가는 3인칭. 천천히 따라오고, 마우스 드래그로 둘러볼 수 있다. *(provisional)*"
+  - id: F1
+    result: pass
+    evidence: "index.html:617"
+    item: "노 젓기 배 조작: 관성, 회전, 노를 저을 때마다 퍼지는 물결"
+  - id: F2
+    result: pass
+    evidence: "index.html:305"
+    item: "하늘을 비추는 수면 셰이더: 잔물결, 해의 금빛 반사 길, 등불 반사광"
+  - id: F3
+    result: pass
+    evidence: "index.html:156"
+    item: "장면 3개: 노을 갈대밭, 수상 기둥 마을, 밤의 등대 호수(해가 점점 진다)"
+  - id: F4
+    result: pass
+    evidence: "index.html:164"
+    item: "장면당 등불 3~4개와 다음 물길을 여는 문"
+  - id: F5
+    result: pass
+    evidence: "index.html:171"
+    item: "등불을 밝힐 때 떠오르는 기억 문장들"
+  - id: F6
+    result: pass
+    evidence: "evidence/full-play.png"
+    item: "블룸, 대기 안개, 톤 매핑, 반딧불이 같은 떠다니는 빛 입자"
+  - id: F7
+    result: pass
+    evidence: "evidence/results.png"
+    item: "엔딩 화면: 등대가 켜지고 모든 기억이 모인다"
+  - id: M1
+    result: pass
+    evidence: "evidence/full-play.png"
+    item: "선착장 옆 잔잔한 물 위에서 시작한다."
+  - id: M2
+    result: pass
+    evidence: "index.html:627"
+    item: "W를 누르면 노가 물을 가르며 배가 미끄러지고 뒤로 물결이 퍼진다."
+  - id: M3
+    result: pass
+    evidence: "index.html:755"
+    item: "앞에 떠 있는 꺼진 등불 하나에 다가가면 빛이 깜박이고, Space를 누르면 불이 켜지며 첫 기억 한 줄이 수면 위로 떠오른다."
+  - id: M4
+    result: not_run
+    mark: not assessed
+    why: "no shot from the first lantern; the lighthouse may be hidden behind the hills from basin 1"
+    item: "그때 멀리 수평선 위 등대의 실루엣이 처음 보인다."
+  - id: M5
+    result: pass
+    evidence: "index.html:163"
+    item: "*(guessed)*"
+  - id: C1
+    result: pass
+    evidence: "index.html:617"
+    item: "실패는 없다."
+  - id: C2
+    result: pass
+    evidence: "index.html:684"
+    item: "장면마다 등불이 갈대숲 사이, 기둥 아래, 다리 밑처럼 조금씩 찾기 어려운 곳에 놓이고, 장면 하나의 등불을 다 밝혀야 다음 물길이 열린다."
+  - id: C3
+    result: pass
+    evidence: "index.html:610"
+    item: "해는 장면을 지날 때마다 낮아져 마지막엔 밤이 된다."
+  - id: C4
+    result: pass
+    evidence: "index.html:610"
+    item: "*(provisional)*"
+measures:
+  - id: step-time
+    value: 0.400
+    unit: ms
+    by: browser
+    detail: "mean 0.009 ms, slowest 0.400 ms, 248 steps"

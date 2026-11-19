@@ -1,0 +1,19 @@
+L1	pass	evidence/full-play.png	low sun, crimson-orange-violet sky with cloud bands, mirror water with gold path, layered hills in haze, dark boat with one warm lantern; ripple rings index.html:323
+L2	pass	evidence/full-play.png	sunset lake light and boat passing scenes; nearest-game note names how it differs
+L3	pass	evidence/full-play.png	camera behind and above the boat; drag to look index.html:617
+F1	pass	index.html:617	stroke-based thrust with glide, keel grip, eased turning; ripples per stroke index.html:627
+F2	pass	index.html:305	reflection shader: waves, sun glitter path, lantern streaks; mirror seen in full-play.png
+F3	pass	index.html:156	3 basins: reeds, stilt village, lighthouse lake; dusk moves to night index.html:610
+F4	pass	index.html:164	3/4/4 lanterns; gates open when a basin is all lit index.html:185
+F5	pass	index.html:171	a memory line per lantern, faded in on lighting index.html:694
+F6	pass	evidence/full-play.png	bloom, fog, ACES tone mapping, floating embers/fireflies index.html:559
+F7	pass	evidence/results.png	lighthouse lamp and beam, lanterns rise, then every memory gathered on the ending screen
+M1	pass	evidence/full-play.png	starts beside the dock on still water
+M2	pass	index.html:627	each stroke pushes the boat and spreads a ring behind
+M3	pass	index.html:755	unlit lanterns glimmer within range; Space lights one and its memory appears index.html:694
+M4	not_assessed	-	no shot from the first lantern; the lighthouse may be hidden behind the hills from basin 1
+M5	pass	index.html:163	guessed mark, covered by M1-M3
+C1	pass	index.html:617	no failure: shores and obstacles only push the boat back
+C2	pass	index.html:684	lanterns in a reed ring, by stilts, under a bridge; gate states how many are left
+C3	pass	index.html:610	sky stage advances with each basin and lantern, night in basin 3
+C4	pass	index.html:610	provisional mark, covered by C1-C3
