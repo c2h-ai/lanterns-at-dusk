@@ -1,0 +1,154 @@
+browser	/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+time	2026-11-19 11:23:27
+render	cheap
+webgl	ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)
+ua	HeadlessChrome/157.0.0.0
+scene	0	title
+state	0	title	{"t":0,"score":0,"gained":"","lit":0,"basin":0,"seen":[true,false,false],"dusk":0,"memory":null,"banner":{"text":"1장 · 노을 갈대밭","t":0},"ending":-1,"done":false,"endT":0,"prompt":"","rowed":false,"wakeT
+scene	1	play
+state	1	play	{"t":0,"score":0,"gained":"","lit":0,"basin":0,"seen":[true,false,false],"dusk":0,"memory":null,"banner":{"text":"1장 · 노을 갈대밭","t":0},"ending":-1,"done":false,"endT":0,"prompt":"","rowed":false,"wakeT
+playinput	4	ArrowUp
+frame	3481	1af970a7
+frame	3482	acaf3e95
+frame	3483	29389740
+frame	3484	5ad86407
+frame	3485	cde1fc99
+frame	3486	dcb92932
+frame	3487	7e0c17f7
+frame	3488	78345654
+frame	3489	5d5346b0
+frame	3490	231b2eb1
+frame	3491	c23dfcc3
+frame	3492	d0f6a5d
+frame	3493	70beb47c
+frame	3494	885a417f
+frame	3495	a6635ad7
+frame	3496	912f0982
+frame	3497	2ef190e6
+frame	3498	147fc3e
+frame	3499	cfc964a0
+frame	3500	3a9ff9e1
+frame	3501	6ddaa0aa
+frame	3502	579bbaf3
+frame	3503	ab01defc
+frame	3504	662fdf36
+frame	3505	ffe4d0d2
+frame	3506	6a8c0c23
+frame	3507	a26213db
+frame	3508	b67419dc
+frame	3509	76b24d66
+frame	3510	8aacdcf4
+frame	3511	38be2922
+frame	3512	fcb075d8
+frame	3513	170ebcdb
+frame	3514	11d76a82
+frame	3515	b429e966
+frame	3516	3f15134
+frame	3517	41b694b0
+frame	3518	6891d411
+frame	3519	604a3d88
+frame	3520	c2f42a5e
+frame	3521	36c62ee5
+frame	3522	41e61e71
+frame	3523	272a465f
+frame	3524	ca167354
+frame	3525	77e9490d
+frame	3526	34e95dce
+frame	3527	1f05b5c2
+frame	3528	548817a0
+frame	3529	bf2eddc6
+frame	3530	ca290489
+frame	3531	aa52f8bb
+frame	3532	fb43eec7
+frame	3533	f1324d52
+frame	3534	7d96e7e9
+frame	3535	9a864969
+frame	3536	ff221143
+frame	3537	e156adb5
+frame	3538	7f5b2a79
+frame	3539	15ae643a
+frame	3540	7f8381
+frame	3541	4f26ccb3
+frame	3542	c71676e1
+frame	3543	3fdfa2c
+frame	3544	43cc2766
+frame	3545	8af0a1f
+frame	3546	710ed6c2
+frame	3547	e7d1a263
+frame	3548	6eea55e7
+frame	3549	1269f857
+frame	3550	7b8f58a7
+frame	3551	8fc54a3a
+frame	3552	b69dd6d6
+frame	3553	c30a7d87
+frame	3554	3b4a8a2b
+frame	3555	c98b35db
+frame	3556	f98786e6
+frame	3557	63545db6
+frame	3558	8ebf7852
+frame	3559	4ff94438
+frame	3560	933d763a
+frame	3561	9fff3a94
+frame	3562	a309c34a
+frame	3563	f182490a
+frame	3564	a05b86e5
+frame	3565	748cd6e6
+frame	3566	1083af48
+frame	3567	9a98e5e2
+frame	3568	26eb2c05
+frame	3569	da9a0bdd
+frame	3570	1ca0eaaa
+frame	3571	a4555485
+frame	3572	89b7829f
+frame	3573	de486e24
+frame	3574	8c1d0c4c
+frame	3575	2b8fa01d
+frame	3576	6b228377
+frame	3577	3a151764
+frame	3578	5fe32c8f
+frame	3579	99c4d424
+frame	3580	186957ce
+frame	3581	fb7dbda2
+frame	3582	d31e1d83
+frame	3583	1f7481e2
+frame	3584	cf59276a
+frame	3585	6b178fbf
+frame	3586	3414e4ca
+frame	3587	bebdd8d0
+frame	3588	cec7ad7d
+frame	3589	e1638f76
+frame	3590	f95a8f8b
+frame	3591	43e2009a
+frame	3592	d1f20697
+frame	3593	2ea7838b
+frame	3594	8fdad7e2
+frame	3595	7ccc14bb
+frame	3596	4664139d
+frame	3597	c9e82e8d
+frame	3598	43d7e7cd
+frame	3599	1ef4509
+frame	3600	3cf69e4c
+state	3600	play	{"t":59.98,"score":0,"gained":"","lit":0,"basin":0,"seen":[true,false,false],"dusk":0,"memory":null,"banner":{"text":"1장 · 노을 갈대밭","t":59.98},"ending":-1,"done":false,"endT":0,"prompt":"물길이 닫혀 있다 · 남은
+digits	log	600 20px "Nanum Myeongjo", AppleMyungjo, "Apple SD Gothic Neo", serif	tabular	0
+digits	log	600 18px "Nanum Myeongjo", AppleMyungjo, "Apple SD Gothic Neo", serif	tabular	0
+digits	log	bold 44px "Nanum Myeongjo", AppleMyungjo, "Apple SD Gothic Neo", serif	tabular	0
+digits	log	600 16px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif	proportional	4.208
+digits	log	600 22px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif	proportional	5.786
+loop	log	none	no loop() step was marked
+first	log	none	no state.beat
+pressure	none	the game set no number state.margin in play
+steptime	3600	0.014	0.400
+frametime	60	87.0	207.9	1140	60	60
+done	3600	play	stop	60.0	17982
+console	0	[.WebGL-0x12400533600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+console	0	[.WebGL-0x12400533600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+console	0	[.WebGL-0x12400533600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+console	0	[.WebGL-0x12400533600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+measured	1280x720
+text	play	canvas	43,29,188,48	29.2	11.51	inside	1장 · 노을 갈대밭
+text	play	canvas	40,60,117,77	26.2	8.77	inside	등불 0 / 3
+text	play	canvas	105,453,130,466	18.7	11.48	inside	등불
+text	play	canvas	500,638,779,658	27.5	14.03	inside	물길이 닫혀 있다 · 남은 등불 3개
+screen	3600	play	51ada758	drawn
+uncaught	0
+shot	/Users/jinseungim/development/dev-game/new-game7/production/qa/evidence/grow-lanterns-at-dusk/typescript.png	703531
