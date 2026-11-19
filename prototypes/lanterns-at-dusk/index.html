@@ -492,7 +492,11 @@ function makeLantern() {
 }
 const lanterns = LANTERNS.map(([x, z, basin], i) => {
   const l = makeLantern(); l.group.position.set(x, 0, z); scene3.add(l.group);
-  return Object.assign(l, { x, z, basin, i, lit: false, litAt: 0, rise: 0 });
+  // A faint column of light over each unlit lantern, so it can be found from across the basin.
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.5, 16, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  beam.position.y = 8.6; l.group.add(beam);
+  return Object.assign(l, { x, z, basin, i, lit: false, litAt: 0, rise: 0, beam });
 });
 const lampPool = Array.from({ length: 4 }, () => { const p = new THREE.PointLight(0xff9a40, 0, 20, 1.8); scene3.add(p); return p; });
 
@@ -754,7 +758,9 @@ function render3D(mode) {
     l.group.rotation.set(Math.sin(t * 0.9 + i) * 0.05, l.rise * 0.5, Math.cos(t * 0.8 + i) * 0.05);
     const near = Math.hypot(bx - l.x, bz - l.z) < tune.lantern_glimmer_range;
     if (l.lit) l.paper.emissiveIntensity = Math.min(2.6, (t - l.litAt) * 3) * (0.92 + Math.sin(t * 9 + i * 3) * 0.05 + Math.sin(t * 23 + i) * 0.03);
-    else l.paper.emissiveIntensity = near ? 0.06 + Math.max(0, Math.sin(t * 2.2 + i)) * 0.35 : 0.03;
+    else l.paper.emissiveIntensity = 0.25 + Math.max(0, Math.sin(t * 2.2 + i)) * (near ? 0.6 : 0.25);
+    l.beam.visible = !l.lit && l.basin === state.basin;
+    l.beam.material.opacity = tune.lantern_beam * (0.7 + Math.sin(t * 1.6 + i) * 0.3);
     if (l.lit) lightsList.push({ p: new THREE.Vector3(l.group.position.x, y + 0.5, l.z), w: 1, d: Math.hypot(cam.position.x - l.x, cam.position.z - l.z) });
   });
   if (state.ending >= 0) lightsList.push({ p: new THREE.Vector3(ISLAND.x, 19.4, ISLAND.z), w: 2.5, d: 0 });
@@ -812,6 +818,29 @@ function drawHUD() {
   }
   if (state.memory && state.memory.t < state.memory.hold + 2.6) {
     text(state.memory.text, W / 2, H * 0.74, 30, '#fff6ea', 'center', SERIF, 600, fade(state.memory.t, state.memory.hold));
+  }
+  // A marker on the nearest unlit lantern in this basin: on screen, or an arrow at the edge.
+  if (state.ending < 0) {
+    let best = null, bd = Infinity;
+    for (const l of lanterns) if (!l.lit && l.basin === state.basin) { const d = Math.hypot(B.x - l.x, B.z - l.z); if (d < bd) { bd = d; best = l; } }
+    if (best && bd > tune.lantern_reach) {
+      const v = new THREE.Vector3(best.x, 1.2, best.z).applyMatrix4(cam.matrixWorldInverse), behind = v.z > 0;
+      v.applyMatrix4(cam.projectionMatrix);
+      let sx = (v.x + 1) / 2 * W, sy = (1 - v.y) / 2 * H;
+      if (behind) { sx = W - sx; sy = H - sy; }
+      const on = !behind && sx > 40 && sx < W - 40 && sy > 40 && sy < H - 40;
+      ctx.globalAlpha = 0.85; ctx.fillStyle = '#ffd27a'; ctx.strokeStyle = 'rgba(40,10,30,0.8)'; ctx.lineWidth = 2;
+      if (on) {
+        ctx.beginPath(); ctx.moveTo(sx, sy - 34); ctx.lineTo(sx + 8, sy - 24); ctx.lineTo(sx, sy - 14); ctx.lineTo(sx - 8, sy - 24); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.globalAlpha = 1; text(`${Math.round(bd)}m`, sx, sy - 50, 16, '#ffe8d0', 'center', SANS, 600, 0.85);
+      } else {
+        const ang = Math.atan2(sy - H / 2, sx - W / 2), ex = W / 2 + Math.cos(ang) * (W / 2 - 50), ey = H / 2 + Math.sin(ang) * (H / 2 - 50);
+        ctx.save(); ctx.translate(ex, ey); ctx.rotate(ang);
+        ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-8, -11); ctx.lineTo(-3, 0); ctx.lineTo(-8, 11); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+        ctx.globalAlpha = 1; text('등불', ex - Math.cos(ang) * 30, ey - Math.sin(ang) * 30, 15, '#ffe8d0', 'center', SANS, 600, 0.85);
+      }
+      ctx.globalAlpha = 1;
+    }
   }
   if (!state.rowed && state.t > 1.5) text('W로 노를 저어 보세요', W / 2, H - 70, 22, '#ffe8d0', 'center', SANS, 600, 0.6 + Math.sin(state.t * 3) * 0.3);
   else if (state.prompt) text(state.prompt, W / 2, H - 70, 22, '#ffe8d0', 'center', SANS, 600, 0.95);

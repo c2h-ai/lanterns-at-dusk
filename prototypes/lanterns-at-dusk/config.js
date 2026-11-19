@@ -18,6 +18,7 @@ window.CONFIG = {
   // ---- Lanterns and the story ----
   lantern_reach: { value: 5, min: 2, max: 10, step: 0.25 },         // m, how close the boat must be to light one
   lantern_glimmer_range: { value: 28, min: 5, max: 60, step: 1 },   // m, unlit lanterns flicker when the boat is this near
+  lantern_beam: { value: 0.22, min: 0, max: 1, step: 0.02 },        // brightness of the light column over an unlit lantern
   memory_hold: { value: 5.5, min: 2, max: 12, step: 0.25 },         // s a memory line stays on screen
   dusk_speed: { value: 0.25, min: 0.05, max: 2, step: 0.05 },       // how fast the sky moves toward the next stage (1/s)
   ending_time: { value: 11, min: 4, max: 25, step: 0.5 },           // s of the lighthouse ending before the results
