@@ -1,0 +1,2 @@
+stop	3600
+log	Enter ArrowUp:4 ArrowLeft:1.2 ArrowUp:5 Space ArrowRight:2 ArrowUp:6 Space ArrowDown:2 ArrowUp:8 wait:2
